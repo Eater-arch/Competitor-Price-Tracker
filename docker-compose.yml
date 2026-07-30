@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    container_name: price-tracker-app
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount workspace directory to persist tracker.db and permit code changes without rebuilding
+      - .:/app
+    environment:
+      - FLASK_ENV=development
+    restart: unless-stopped

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competitor Price Tracker | Real-time E-Commerce Analytics</title>
+    <meta name="description"
+        content="Advanced real-time competitor price tracking dashboard powered by Flask, BeautifulSoup, and SQLite with live catalog scraping and search capabilities.">
+
+    <!-- Bootstrap 5 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+
+    <!-- Bootstrap Icons CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font-bootstrap-icons.min.css">
+
+    <!-- Custom Vanilla CSS Dashboard Theme -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <!-- Navigation Header -->
+    <header>
+        <nav class="navbar-custom d-flex justify-content-between align-items-center">
+            <div class="navbar-brand-custom">
+                <i class="bi bi-graph-up-arrow brand-icon"></i>
+                <span>Competitor Price Tracker</span>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <span id="lastScrapeTime" class="text-secondary small font-monospace d-none d-md-inline-block">
+                    <i class="bi bi-clock"></i> Live Target: books.toscrape.com
+                </span>
+                <button id="runScraperBtn" type="button" class="btn-scraper"
+                    title="Harvest pricing updates from target site">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                    <span>Run Scraper</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Dashboard Content -->
+    <main class="container py-5 flex-grow-1">
+
+        <!-- Page Title & Intro -->
+        <section class="mb-4">
+            <h1 class="fw-bold h2 mb-1">Competitor Catalog Intelligence</h1>
+            <p class="text-secondary small">Monitoring live retail prices, customer ratings, and inventory availability
+                from monitored targets.</p>
+        </section>
+
+        <!-- KPI Metrics Analytics Cards -->
+        <section class="row g-4 mb-5 aria-label='Summary KPI statistics'">
+            <div class="col-12 col-md-4">
+                <article class="kpi-card">
+                    <div>
+                        <div class="kpi-title"><i class="bi bi-box-seams"></i> Total Products Tracked</div>
+                        <div id="totalBooksCount" class="kpi-value" data-val="{{ stats.total_books }}">{{
+                            stats.total_books }}</div>
+                    </div>
+                    <div class="kpi-subtext"><span class="kpi-dot">●</span> Persistent SQLite database records</div>
+                </article>
+            </div>
+            <div class="col-12 col-md-4">
+                <article class="kpi-card">
+                    <div>
+                        <div class="kpi-title"><i class="bi bi-currency-rupee"></i> Average Market Price</div>
+                        <div id="avgPriceCount" class="kpi-value" data-val="{{ stats.avg_price }}">₹{{ stats.avg_price
+                            }}</div>
+                    </div>
+                    <div class="kpi-subtext">Calculated via SQL aggregate</div>
+                </article>
+            </div>
+            <div class="col-12 col-md-4">
+                <article class="kpi-card">
+                    <div>
+                        <div class="kpi-title"><i class="bi bi-check2-all"></i> Currently In Stock</div>
+                        <div id="inStockCount" class="kpi-value" data-val="{{ stats.in_stock }}">{{ stats.in_stock }}
+                        </div>
+                    </div>
+                    <div class="kpi-subtext">Available for immediate retail dispatch</div>
+                </article>
+            </div>
+        </section>
+
+        <!-- Interactive Table Section -->
+        <section aria-label="Competitor pricing data table">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+                <h2 class="h5 fw-semibold mb-0 text-uppercase letter-spacing-1 text-secondary">
+                    <i class="bi bi-list-columns-reverse"></i> Live Price Registry
+                </h2>
+                <div class="search-container">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" id="searchFilter" class="search-input"
+                        placeholder="Instant title search filter..." aria-label="Filter books by title">
+                </div>
+            </div>
+
+            <div class="table-container">
+                <div class="table-responsive">
+                    <table class="table table-custom text-start align-middle" aria-describedby="table Description">
+                        <thead>
+                            <tr>
+                                <th scope="col" style="width: 28%;">Book Title</th>
+                                <th scope="col" style="width: 17%;">Base Market Price</th>
+                                <th scope="col" style="width: 24%;">Competitor Clash (Stores)</th>
+                                <th scope="col" style="width: 20%;">🏆 Best Deal Winner</th>
+                                <th scope="col" style="width: 11%;">Status & Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody id="booksTableBody">
+                            {% if books and books|length > 0 %}
+                            {% for book in books %}
+                            <tr>
+                                <td>
+                                    <a href="javascript:void(0);"
+                                        class="book-title-link d-flex align-items-center text-decoration-none"
+                                        data-book-id="{{ book.id }}" data-book-title="{{ book.title }}"
+                                        title="Click to view interactive Historical Price Trend Chart!">
+                                        <i class="bi bi-graph-up-arrow fs-5 me-2 text-saffron-chart-icon"></i>
+                                        <span class="book-title fw-bold text-dark">{{ book.title }}</span>
+                                    </a>
+                                    <div class="text-muted small ms-4">ID: #{{ book.id }} • {{ book.last_updated }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="book-price">{{ book.price_str }}</span>
+                                    {% if book.price_direction == 'drop' %}
+                                    <span class="price-delta-badge delta-drop">{{ book.price_delta_str }}</span>
+                                    {% elif book.price_direction == 'hike' %}
+                                    <span class="price-delta-badge delta-hike">{{ book.price_delta_str }}</span>
+                                    {% elif book.price_direction == 'new' %}
+                                    <span class="price-delta-badge delta-new">{{ book.price_delta_str }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="store-clash-grid">
+                                        <div class="store-offer">
+                                            <span class="store-name"><i class="bi bi-cart2 text-warning"></i> Amazon
+                                                IN:</span>
+                                            <span class="store-price">₹{{ "%.2f"|format(book.price_amazon or 0.0)
+                                                }}</span>
+                                        </div>
+                                        <div class="store-offer">
+                                            <span class="store-name"><i class="bi bi-bag-check text-primary"></i>
+                                                Flipkart:</span>
+                                            <span class="store-price">₹{{ "%.2f"|format(book.price_flipkart or 0.0)
+                                                }}</span>
+                                        </div>
+                                        <div class="store-offer">
+                                            <span class="store-name"><i class="bi bi-shop text-danger"></i>
+                                                Reliance:</span>
+                                            <span class="store-price">₹{{ "%.2f"|format(book.price_reliance or 0.0)
+                                                }}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge-best-deal">
+                                        <i class="bi bi-fire fs-6 text-danger"></i>
+                                        <span>Best Deal: <strong>{{ book.best_store }}</strong> (₹{{
+                                            "%.2f"|format(book.best_price or 0.0) }})</span>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1 align-items-start">
+                                        {% if 'in stock' in book.availability|lower %}
+                                        <span class="badge-status badge-in-stock"><i
+                                                class="bi bi-check-circle-fill"></i> In Stock</span>
+                                        {% else %}
+                                        <span class="badge-status badge-out-stock"><i
+                                                class="bi bi-exclamation-triangle-fill"></i> Out of Stock</span>
+                                        {% endif %}
+                                        <span class="badge-rating"><i class="bi bi-star-fill text-warning"></i> {{
+                                            book.rating or 'N/A' }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr id="emptyStateRow">
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                    <h5>No products monitored in SQLite database yet.</h5>
+                                    <p class="small">Click <strong>'Run Scraper'</strong> above to begin harvesting
+                                        competitor pricing!</p>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-4 footer-custom small">
+        <div class="container">
+            <span>• Designed for automated high-frequency
+                price analysis</span>
+        </div>
+    </footer>
+
+    <!-- Interactive Toast Alerts Container -->
+    <div id="alertContainer" class="toast-container-custom"></div>
+
+    <!-- Interactive Price Trend Modal -->
+    <div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header modal-header-custom">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="chartModalLabel">
+                        <i class="bi bi-graph-up-arrow text-warning"></i>
+                        <span id="chartModalTitle">Time-Series Competitor Price Trend</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div id="chartLoadingSpinner" class="text-center py-5">
+                        <div class="spinner-border text-warning mb-2" role="status"></div>
+                        <p class="text-muted mb-0">Querying chronological price snapshots from SQLite database...</p>
+                    </div>
+                    <div id="chartContainer" style="display: none; height: 380px;">
+                        <canvas id="priceTrendChart"></canvas>
+                    </div>
+                    <div id="chartErrorMessage" class="text-center py-4 text-danger" style="display: none;"></div>
+                </div>
+                <div class="modal-footer bg-light border-top-0 d-flex justify-content-between align-items-center">
+                    <span class="small text-muted"><i class="bi bi-shield-check text-success"></i> Real-time historical
+                        analytics</span>
+                    <button type="button" class="btn btn-secondary px-4 rounded-pill" data-bs-dismiss="modal">Close
+                        Graph</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
+    <!-- Chart.js CDN for interactive price trend line visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Frontend Interactive Vanilla JS -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+
+</html>
